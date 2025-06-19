@@ -84,6 +84,11 @@ lib/
 ├── di/
 │   └── service_locator.dart
 └── main.dart
+
+test/
+├── domain/
+│   └── usecases/
+├── helpers/
 ```
 
 ### Flujo de datos:

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nolatech_messenger/presentation/providers/auth_provider.dart';
+import 'package:nolatech_messenger/presentation/utils/app_colors.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import 'package:intl/intl.dart';

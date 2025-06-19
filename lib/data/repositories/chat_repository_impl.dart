@@ -13,60 +13,25 @@ class ChatRepositoryImpl implements ChatRepository {
   ChatRepositoryImpl() : _dbRef = FirebaseDatabase.instance.ref();
 
   @override
-  Stream<List<Conversation>> getUserConversations(String userId) {
-    return _dbRef.child('users/$userId/chats').onValue.asyncMap((event) async {
-      final data = event.snapshot.value as Map?;
-      if (data == null) return [];
+  Future<String> createOrGetChat(String userAId, String userBId) async {
+    final chatId = _generateChatId(userAId, userBId);
+    final chatRef = _dbRef.child('chats/$chatId');
 
-      final futures = <Future<ConversationModel>>[];
+    final chatSnapshot = await chatRef.get();
+    if (!chatSnapshot.exists) {
+      final now = DateTime.now().toIso8601String();
 
-      for (final entry in data.entries) {
-        final chatId = entry.key as String;
-        final chatData = Map<String, dynamic>.from(entry.value);
+      final participants = {userAId: true, userBId: true};
 
-        final otherUserId = extractOtherUserId(chatId, userId);
+      await chatRef.set({
+        'participants': participants,
+        'createdAt': now,
+        'updatedAt': now,
+        'lastMessage': '',
+      });
+    }
 
-        final future = _dbRef.child('users/$otherUserId').get().then((
-          snapshot,
-        ) {
-          final otherName =
-              snapshot.child('name').value as String? ?? 'Usuario';
-
-          final conversation = ConversationModel.fromMap(chatId, chatData);
-          conversation.name = otherName;
-          return conversation;
-        });
-
-        futures.add(future);
-      }
-
-      return await Future.wait(futures);
-    });
-  }
-
-  @override
-  Stream<List<Message>> getMessages(String chatId) {
-    final messagesRef = _dbRef.child('chats/$chatId/messages');
-
-    return messagesRef.onValue.map((event) {
-      final data = event.snapshot.value;
-      if (data == null) return [];
-
-      final Map<dynamic, dynamic> messagesMap = data as Map<dynamic, dynamic>;
-
-      final messages =
-          messagesMap.entries.map((entry) {
-            final Map<String, dynamic> map = Map<String, dynamic>.from(
-              entry.value,
-            );
-            return MessageModel.fromMap(entry.key, map);
-          }).toList();
-
-      // Ordenar por timestamp ascendente
-      messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-      return messages;
-    });
+    return chatId;
   }
 
   @override
@@ -84,29 +49,95 @@ class ChatRepositoryImpl implements ChatRepository {
 
     final messageData = model.toMap();
 
-    final updatedFields = {
-      'lastMessage': message.content,
-      'updatedAt': message.timestamp.toIso8601String(),
+    final updates = <String, dynamic>{
+      'chats/$chatId/messages/${model.id}': messageData,
+      'chats/$chatId/lastMessage': message.content,
+      'chats/$chatId/updatedAt': message.timestamp.toIso8601String(),
     };
 
-    final updates = <String, dynamic>{};
-
-    // 1. Agregar el mensaje
-    updates['chats/$chatId/messages/${model.id}'] = messageData;
-
-    // 2. Actualizar el resumen del chat
-    updatedFields.forEach((key, value) {
-      updates['chats/$chatId/$key'] = value;
-    });
-
-    // 3. Actualizar SOLO el resumen del chat en el nodo del usuario autenticado
-    final currentUid = message.senderId;
-    updatedFields.forEach((key, value) {
-      updates['users/$currentUid/chats/$chatId/$key'] = value;
-    });
-
-    // Ejecutar todas las actualizaciones en un solo batch
     await _dbRef.update(updates);
+  }
+
+  @override
+  Stream<List<Conversation>> getUserConversations(String userId) {
+    final chatsRef = _dbRef.child('chats');
+
+    return chatsRef.onValue.asyncMap((event) async {
+      final data = event.snapshot.value as Map<dynamic, dynamic>? ?? {};
+      final conversations = <Conversation>[];
+
+      for (final entry in data.entries) {
+        final chatId = entry.key;
+        final chatData = Map<String, dynamic>.from(entry.value);
+
+        // Validar si el usuario es participante del chat
+        final participants = Map<String, dynamic>.from(
+          chatData['participants'] ?? {},
+        );
+        if (!participants.containsKey(userId)) continue;
+
+        final lastMessage = chatData['lastMessage'] ?? '';
+        final updatedAtRaw = chatData['updatedAt'];
+        final updatedAt =
+            DateTime.tryParse(updatedAtRaw ?? '') ?? DateTime.now();
+
+        int unreadCount = 0;
+
+        // Calcular mensajes no leídos
+        final messagesSnapshot =
+            await _dbRef.child('chats/$chatId/messages').get();
+        if (messagesSnapshot.exists) {
+          final messagesData = Map<String, dynamic>.from(
+            messagesSnapshot.value as Map,
+          );
+          for (final msgEntry in messagesData.entries) {
+            final msg = Map<String, dynamic>.from(msgEntry.value);
+            final senderId = msg['senderId'];
+            final readBy = Map<String, dynamic>.from(msg['readBy'] ?? {});
+            if (senderId != userId && !readBy.containsKey(userId)) {
+              unreadCount++;
+            }
+          }
+        }
+
+        // Obtener el nombre del otro usuario
+        final otherUserId = extractOtherUserId(chatId, userId);
+        final userSnapshot = await _dbRef.child('users/$otherUserId').get();
+        final otherName =
+            userSnapshot.child('name').value as String? ?? 'Usuario';
+
+        final conversation = ConversationModel(
+          id: chatId,
+          name: otherName,
+          lastMessage: lastMessage,
+          updatedAt: updatedAt,
+          unreadCount: unreadCount,
+        );
+
+        conversations.add(conversation);
+      }
+
+      // Ordenar por última actualización
+      conversations.sort((a, b) => b.updatedAt!.compareTo(a.updatedAt!));
+      return conversations;
+    });
+  }
+
+  @override
+  Stream<List<Message>> getMessages(String chatId) {
+    final messagesRef = _dbRef.child('chats/$chatId/messages');
+
+    return messagesRef.onValue.map((event) {
+      final data = event.snapshot.value as Map<dynamic, dynamic>? ?? {};
+      final messages =
+          data.entries.map((entry) {
+            final value = Map<String, dynamic>.from(entry.value);
+            return MessageModel.fromMap(entry.key, value);
+          }).toList();
+
+      messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      return messages;
+    });
   }
 
   @override
@@ -181,37 +212,6 @@ class ChatRepositoryImpl implements ChatRepository {
         }).toList();
 
     return users;
-  }
-
-  @override
-  Future<String> createOrGetChat(String userAId, String userBId) async {
-    final chatId = _generateChatId(userAId, userBId);
-    final chatRef = _dbRef.child('chats/$chatId');
-
-    final chatSnapshot = await chatRef.get();
-    if (!chatSnapshot.exists) {
-      // Crear el chat
-      final now = DateTime.now().toIso8601String();
-
-      final participants = {userAId: true, userBId: true};
-
-      await chatRef.set({
-        'participants': participants,
-        'createdAt': now,
-        'updatedAt': now,
-        'lastMessage': '',
-      });
-
-      // Crear referencia para cada usuario
-      for (final userId in [userAId, userBId]) {
-        await _dbRef.child('users/$userId/chats/$chatId').set({
-          'updatedAt': now,
-          'lastMessage': '',
-        });
-      }
-    }
-
-    return chatId;
   }
 
   String _generateChatId(String userAId, String userBId) {
