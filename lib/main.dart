@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'di/service_locator.dart' as di;
 import 'package:provider/provider.dart';
 import 'package:get_it/get_it.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'presentation/providers.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/router/app_router.dart';
+import 'presentation/utils/app_colors.dart';
 
 final sl = GetIt.instance;
 
@@ -34,6 +36,12 @@ class MyApp extends StatelessWidget {
       child: MaterialApp.router(
         title: 'Nolatech Messenger',
         routerConfig: router,
+        theme: ThemeData(
+          useMaterial3: true,
+          scaffoldBackgroundColor: AppColors.secondaryBackground,
+          textTheme: GoogleFonts.poppinsTextTheme(),
+          appBarTheme: AppBarTheme(backgroundColor: AppColors.info),
+        ),
       ),
     );
   }

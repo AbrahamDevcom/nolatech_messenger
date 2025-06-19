@@ -113,6 +113,6 @@ class AuthProvider extends ChangeNotifier {
       (_) => user = null,
     );
 
-    notifyListeners();
+    //notifyListeners();
   }
 }
