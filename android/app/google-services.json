@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "920205619133",
+    "firebase_url": "https://nolatech-messenger-default-rtdb.firebaseio.com",
+    "project_id": "nolatech-messenger",
+    "storage_bucket": "nolatech-messenger.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:920205619133:android:d0a84bb8b94881c23c6cd4",
+        "android_client_info": {
+          "package_name": "com.abraham.nolatech_messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfDqg1iGkMkcbtwmj5hA746s1_kezTc6I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
